@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Lost City 2004 RuneScape Time Played Calculator</title>
+  <title>Lost City 2004 RuneScape Time Played & Bank Value</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="style.css">
   <style>
@@ -33,7 +33,7 @@
   </style>
 </head>
 <body>
-  <h2>Upload a .sav file to Check Time Played</h2>
+  <h2>Upload a .sav file to Check Time Played & Bank Value</h2>
   <input type="file" id="file" accept=".sav">
   <button onclick="readTicks()">Check Ticks</button>
   <pre id="out"></pre>
@@ -49,6 +49,11 @@
       return { days, hours, minutes, seconds };
     }
 
+    function calculateBankValue(bank, prices) {
+      return bank.reduce((sum, item) =>
+        sum + (prices[item.name] || 0) * item.qty, 0);
+    }
+
     function readTicks() {
       const file = document.getElementById("file").files[0];
       if (!file) return alert("Choose a file first!");
@@ -57,29 +62,48 @@
       reader.onload = function(e) {
         const bytes = new Uint8Array(e.target.result);
         const ticks = (bytes[24] << 24) | (bytes[25] << 16) | (bytes[26] << 8) | bytes[27];
-
         const totalSeconds = ticks * 0.6;
         const t = formatTime(totalSeconds);
 
-        const out =
-          `Ticks: ${ticks}\n\n` +
-          `Minutes: ${Math.floor(totalSeconds / 60)}m ${Math.floor(totalSeconds % 60)}s\n` +
-          `Hours: ${Math.floor(totalSeconds / 3600)}h ${Math.floor((totalSeconds % 3600) / 60)}m ${Math.floor(totalSeconds % 60)}s\n` +
-          `Days: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n`;
+        // --- For now, a simple test bank (replace with real parsed data later) ---
+        const bank = [
+          { name: "lobster", qty: 120 },
+          { name: "rune_scimitar", qty: 3 },
+          { name: "nature_rune", qty: 250 }
+        ];
 
-        document.getElementById("out").innerText = out;
+        // --- Fetch weekly prices and combine both outputs ---
+        fetch("prices.json")
+          .then(res => res.json())
+          .then(prices => {
+            const bankValue = calculateBankValue(bank, prices);
+
+            const out =
+              `Ticks: ${ticks}\n\n` +
+              `Minutes: ${Math.floor(totalSeconds / 60)}m ${Math.floor(totalSeconds % 60)}s\n` +
+              `Hours: ${Math.floor(totalSeconds / 3600)}h ${Math.floor((totalSeconds % 3600) / 60)}m ${Math.floor(totalSeconds % 60)}s\n` +
+              `Days: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n\n` +
+              `💰 Bank Value: ${bankValue.toLocaleString()} gp`;
+
+            document.getElementById("out").innerText = out;
+          })
+          .catch(err => {
+            document.getElementById("out").innerText =
+              `Ticks: ${ticks}\n\nFailed to load prices.json\n\nError: ${err}`;
+            console.error(err);
+          });
       };
 
       reader.readAsArrayBuffer(file);
     }
   </script>
+
   <h3>
-  You can access your Lost City save file here:
-  <a href="https://2004.lostcity.rs/account" target="_blank">
-    2004.lostcity.rs/account
-  </a></h3>
+    You can access your Lost City save file here:
+    <a href="https://2004.lostcity.rs/account" target="_blank">
+      2004.lostcity.rs/account
+    </a>
+  </h3>
 
 </body>
 </html>
-
-
