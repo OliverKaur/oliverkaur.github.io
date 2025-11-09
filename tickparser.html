@@ -96,11 +96,17 @@
         console.warn("Could not load prices.json:",err);
       }
 
-      // calculate total
+      // calculate total value
       let totalValue=0;
       for(const it of bank){
         const price=prices[it.item_id]||0;
         totalValue+=price*it.qty;
+      }
+
+      // calculate total count
+      let totalItems = 0;
+      for (const it of bank) {
+        totalItems += it.qty;
       }
 
       // derived time formats
@@ -118,7 +124,8 @@
         `Minutes: ${totalMinutes}m ${remSec}s\n` +
         `Seconds: ${onlySeconds}s\n\n` +
         `💰 Bank Value: ${totalValue.toLocaleString()} gp\n` +
-        `Items Parsed: ${bank.length}`;
+        `Bank Slots: ${bank.length}`;
+        `Total Bank Items: ${totalItems.toLocaleString()}`;
 
       document.getElementById("out").innerText=out;
     };
@@ -128,5 +135,6 @@
 
 </body>
 </html>
+
 
 
