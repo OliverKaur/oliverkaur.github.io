@@ -18,103 +18,114 @@
   <pre id="out"></pre>
 
   <script>
-    // ---------- helpers ----------
-    function formatTime(seconds) {
-      const days = Math.floor(seconds / 86400);
-      seconds %= 86400;
-      const hours = Math.floor(seconds / 3600);
-      seconds %= 3600;
-      const minutes = Math.floor(seconds / 60);
-      seconds = Math.floor(seconds % 60);
-      return { days, hours, minutes, seconds };
-    }
-    function readU16BE(d,p){return (d[p]<<8)|d[p+1];}
-    function readU32BE(d,p){return ((d[p]<<24)|(d[p+1]<<16)|(d[p+2]<<8)|d[p+3])>>>0;}
-    function readCountFlexible(d,p){
-      const b0=d[p];
-      if(b0===0xFF)return [readU32BE(d,p+1),5];
-      if(b0===0x00)return [readU32BE(d,p),4];
-      return [b0,1];
-    }
+  // ---------- helpers ----------
+  function formatTime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    seconds %= 86400;
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds = Math.floor(seconds % 60);
+    return { days, hours, minutes, seconds };
+  }
+  function readU16BE(d,p){return (d[p]<<8)|d[p+1];}
+  function readU32BE(d,p){return ((d[p]<<24)|(d[p+1]<<16)|(d[p+2]<<8)|d[p+3])>>>0;}
+  function readCountFlexible(d,p){
+    const b0=d[p];
+    if(b0===0xFF)return [readU32BE(d,p+1),5];
+    if(b0===0x00)return [readU32BE(d,p),4];
+    return [b0,1];
+  }
 
-    // ---------- bank parser ----------
-    function parseBank(bytes){
-      const START=[0x00,0x5F,0x00,0xF0];
-      const END=[0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00];
-      // find start marker
-      let sm=-1;
-      for(let i=0;i<bytes.length-4;i++){
-        if(bytes[i]===START[0]&&bytes[i+1]===START[1]&&bytes[i+2]===START[2]&&bytes[i+3]===START[3]){
-          sm=i+START.length;break;
-        }
+  // ---------- bank parser ----------
+  function parseBank(bytes){
+    const START=[0x00,0x5F,0x00,0xF0];
+    const END=[0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00];
+    // find start marker
+    let sm=-1;
+    for(let i=0;i<bytes.length-4;i++){
+      if(bytes[i]===START[0]&&bytes[i+1]===START[1]&&bytes[i+2]===START[2]&&bytes[i+3]===START[3]){
+        sm=i+START.length;break;
       }
-      if(sm===-1)return[];
-      // find end marker
-      let em=bytes.length;
-      for(let i=sm+8;i<bytes.length-8;i++){
-        let match=true;
-        for(let j=0;j<8;j++){if(bytes[i+j]!==END[j]){match=false;break;}}
-        if(match){em=i;break;}
-      }
-      // parse
-      const items=[];
-      let o=sm,slot=1;
-      while(o+3<=em){
-        const idPlus1=readU16BE(bytes,o); o+=2;
-        const item_id=idPlus1-1;
-        const [qty,size]=readCountFlexible(bytes,o);
-        if(size===0)break;
-        o+=size;
-        if(item_id>0&&item_id<=10000&&qty>0)
-          items.push({slot,item_id,qty});
-        slot++;
-      }
-      return items;
     }
-
-    // ---------- main ----------
-    async function readSave(){
-      const file=document.getElementById("file").files[0];
-      if(!file)return alert("Choose a file first!");
-      const reader=new FileReader();
-      reader.onload=async e=>{
-        const bytes=new Uint8Array(e.target.result);
-
-        // ticks/time
-        const ticks=(bytes[24]<<24)|(bytes[25]<<16)|(bytes[26]<<8)|bytes[27];
-        const totalSeconds=ticks*0.6;
-        const t=formatTime(totalSeconds);
-
-        // parse bank
-        const bank=parseBank(bytes);
-
-        // load prices.json
-        let prices={};
-        try{
-          prices=await fetch("prices.json").then(r=>r.json());
-        }catch(err){
-          console.warn("Could not load prices.json:",err);
-        }
-
-        // calculate total
-        let totalValue=0;
-        for(const it of bank){
-          const price=prices[it.item_id]||0;
-          totalValue+=price*it.qty;
-        }
-
-        // output
-        const out=
-          `Ticks: ${ticks}\n\n`+
-          `Time: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n\n`+
-          `💰 Bank Value: ${totalValue.toLocaleString()} gp\n`+
-          `Items Parsed: ${bank.length}\n\n`+
-          bank.slice(0,30).map(it=>`ID ${it.item_id} × ${it.qty} (Value ${(prices[it.item_id]||0).toLocaleString()} ea)`).join("\n");
-
-        document.getElementById("out").innerText=out;
-      };
-      reader.readAsArrayBuffer(file);
+    if(sm===-1)return[];
+    // find end marker
+    let em=bytes.length;
+    for(let i=sm+8;i<bytes.length-8;i++){
+      let match=true;
+      for(let j=0;j<8;j++){if(bytes[i+j]!==END[j]){match=false;break;}}
+      if(match){em=i;break;}
     }
-  </script>
+    // parse
+    const items=[];
+    let o=sm,slot=1;
+    while(o+3<=em){
+      const idPlus1=readU16BE(bytes,o); o+=2;
+      const item_id=idPlus1-1;
+      const [qty,size]=readCountFlexible(bytes,o);
+      if(size===0)break;
+      o+=size;
+      if(item_id>0&&item_id<=10000&&qty>0)
+        items.push({slot,item_id,qty});
+      slot++;
+    }
+    return items;
+  }
+
+  // ---------- main ----------
+  async function readSave(){
+    const file=document.getElementById("file").files[0];
+    if(!file)return alert("Choose a file first!");
+    const reader=new FileReader();
+    reader.onload=async e=>{
+      const bytes=new Uint8Array(e.target.result);
+
+      // ticks/time
+      const ticks=(bytes[24]<<24)|(bytes[25]<<16)|(bytes[26]<<8)|bytes[27];
+      const totalSeconds=ticks*0.6;
+      const t=formatTime(totalSeconds);
+
+      // parse bank
+      const bank=parseBank(bytes);
+
+      // load prices.json
+      let prices={};
+      try{
+        prices=await fetch("prices.json").then(r=>r.json());
+      }catch(err){
+        console.warn("Could not load prices.json:",err);
+      }
+
+      // calculate total
+      let totalValue=0;
+      for(const it of bank){
+        const price=prices[it.item_id]||0;
+        totalValue+=price*it.qty;
+      }
+
+      // derived time formats
+      const totalHours=Math.floor(totalSeconds/3600);
+      const remMin=Math.floor((totalSeconds%3600)/60);
+      const remSec=Math.floor(totalSeconds%60);
+      const totalMinutes=Math.floor(totalSeconds/60);
+      const onlySeconds=Math.floor(totalSeconds);
+
+      // output
+      const out=
+        `Ticks: ${ticks}\n\n` +
+        `Days/Hours/Minutes/Seconds: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n` +
+        `Hours/Minutes/Seconds: ${totalHours}h ${remMin}m ${remSec}s\n` +
+        `Minutes/Seconds: ${totalMinutes}m ${remSec}s\n` +
+        `Seconds: ${onlySeconds}s\n\n` +
+        `💰 Bank Value: ${totalValue.toLocaleString()} gp\n` +
+        `Items Parsed: ${bank.length}`;
+
+      document.getElementById("out").innerText=out;
+    };
+    reader.readAsArrayBuffer(file);
+  }
+</script>
+
 </body>
 </html>
+
