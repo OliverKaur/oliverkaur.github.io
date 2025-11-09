@@ -2,33 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Lost City 2004 RuneScape — Time Played & Bank Value</title>
+  <title>Lost City 2004 – Time Played & Bank Value</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      padding: 20px;
-      max-width: 600px;
-      margin: auto;
-    }
-    h2 { text-align: center; }
-    button {
-      margin-left: 10px;
-      padding: 6px 12px;
-      cursor: pointer;
-    }
-    pre {
-      background: black;
-      color: lime;
-      padding: 12px;
-      margin-top: 10px;
-      white-space: pre-wrap;
-      font-size: 14px;
-      border-radius: 6px;
-    }
-    h3 { margin-top: 30px; text-align: center; line-height: 1.5em; }
-    h3 a { display: block; margin-top: 5px; }
+    body { font-family: Arial, sans-serif; background:#f7f7f7; padding:20px; max-width:600px; margin:auto; }
+    h2 { text-align:center; }
+    button { margin-left:10px; padding:6px 12px; cursor:pointer; }
+    pre { background:black; color:lime; padding:12px; margin-top:10px; white-space:pre-wrap; font-size:14px; border-radius:6px; }
   </style>
 </head>
 <body>
@@ -38,7 +18,7 @@
   <pre id="out"></pre>
 
   <script>
-    // ---- TIME PARSER ----
+    // ---------- helpers ----------
     function formatTime(seconds) {
       const days = Math.floor(seconds / 86400);
       seconds %= 86400;
@@ -48,104 +28,93 @@
       seconds = Math.floor(seconds % 60);
       return { days, hours, minutes, seconds };
     }
-
-    // ---- UTILS ----
-    function readU16BE(d, p) {
-      return (d[p] << 8) | d[p + 1];
-    }
-    function readU32BE(d, p) {
-      return ((d[p] << 24) | (d[p + 1] << 16) | (d[p + 2] << 8) | d[p + 3]) >>> 0;
-    }
-    function readCountFlexible(d, p) {
-      const b0 = d[p];
-      if (b0 === 0xFF) return [readU32BE(d, p + 1), 5];
-      if (b0 === 0x00) return [readU32BE(d, p), 4];
-      return [b0, 1];
+    function readU16BE(d,p){return (d[p]<<8)|d[p+1];}
+    function readU32BE(d,p){return ((d[p]<<24)|(d[p+1]<<16)|(d[p+2]<<8)|d[p+3])>>>0;}
+    function readCountFlexible(d,p){
+      const b0=d[p];
+      if(b0===0xFF)return [readU32BE(d,p+1),5];
+      if(b0===0x00)return [readU32BE(d,p),4];
+      return [b0,1];
     }
 
-    // ---- BANK PARSER ----
-    function parseBank(data) {
-      const START = [0x00, 0x5F, 0x00, 0xF0];
-      const END = [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00];
-
-      // find start
-      let sm = -1;
-      for (let i = 0; i < data.length - START.length; i++) {
-        if (data[i]===START[0]&&data[i+1]===START[1]&&data[i+2]===START[2]&&data[i+3]===START[3]) {
-          sm = i + START.length;
-          break;
+    // ---------- bank parser ----------
+    function parseBank(bytes){
+      const START=[0x00,0x5F,0x00,0xF0];
+      const END=[0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00];
+      // find start marker
+      let sm=-1;
+      for(let i=0;i<bytes.length-4;i++){
+        if(bytes[i]===START[0]&&bytes[i+1]===START[1]&&bytes[i+2]===START[2]&&bytes[i+3]===START[3]){
+          sm=i+START.length;break;
         }
       }
-      if (sm === -1) return [];
-
-      // find end
-      let em = data.length;
-      for (let i = sm + 8; i < data.length - END.length; i++) {
-        let match = true;
-        for (let j = 0; j < END.length; j++) {
-          if (data[i + j] !== END[j]) { match = false; break; }
-        }
-        if (match) { em = i; break; }
+      if(sm===-1)return[];
+      // find end marker
+      let em=bytes.length;
+      for(let i=sm+8;i<bytes.length-8;i++){
+        let match=true;
+        for(let j=0;j<8;j++){if(bytes[i+j]!==END[j]){match=false;break;}}
+        if(match){em=i;break;}
       }
-
-      let o = sm, slot = 1;
-      const items = [];
-      while (o + 3 <= em) {
-        const idPlus1 = readU16BE(data, o);
-        o += 2;
-        const item_id = idPlus1 - 1;
-        const [qty, size] = readCountFlexible(data, o);
-        if (size === 0) break;
-        o += size;
-        if (item_id > 0 && item_id <= 10000 && qty > 0)
-          items.push({ slot, item_id, qty });
+      // parse
+      const items=[];
+      let o=sm,slot=1;
+      while(o+3<=em){
+        const idPlus1=readU16BE(bytes,o); o+=2;
+        const item_id=idPlus1-1;
+        const [qty,size]=readCountFlexible(bytes,o);
+        if(size===0)break;
+        o+=size;
+        if(item_id>0&&item_id<=10000&&qty>0)
+          items.push({slot,item_id,qty});
         slot++;
       }
       return items;
     }
 
-    // ---- MAIN FUNCTION ----
-    async function readSave() {
-      const file = document.getElementById("file").files[0];
-      if (!file) return alert("Choose a file first!");
+    // ---------- main ----------
+    async function readSave(){
+      const file=document.getElementById("file").files[0];
+      if(!file)return alert("Choose a file first!");
+      const reader=new FileReader();
+      reader.onload=async e=>{
+        const bytes=new Uint8Array(e.target.result);
 
-      const reader = new FileReader();
-      reader.onload = async e => {
-        const bytes = new Uint8Array(e.target.result);
+        // ticks/time
+        const ticks=(bytes[24]<<24)|(bytes[25]<<16)|(bytes[26]<<8)|bytes[27];
+        const totalSeconds=ticks*0.6;
+        const t=formatTime(totalSeconds);
 
-        // Parse ticks
-        const ticks = (bytes[24] << 24) | (bytes[25] << 16) | (bytes[26] << 8) | bytes[27];
-        const totalSeconds = ticks * 0.6;
-        const t = formatTime(totalSeconds);
+        // parse bank
+        const bank=parseBank(bytes);
 
-        // Parse bank
-        const bank = parseBank(bytes);
+        // load prices.json
+        let prices={};
+        try{
+          prices=await fetch("prices.json").then(r=>r.json());
+        }catch(err){
+          console.warn("Could not load prices.json:",err);
+        }
 
-        // Load price data (optional)
-        let prices = {};
-        try {
-          prices = await fetch("prices.json").then(r => r.json());
-        } catch {}
+        // calculate total
+        let totalValue=0;
+        for(const it of bank){
+          const price=prices[it.item_id]||0;
+          totalValue+=price*it.qty;
+        }
 
-        const totalValue = bank.reduce((sum, it) => sum + (prices[it.item_id] || 0) * it.qty, 0);
+        // output
+        const out=
+          `Ticks: ${ticks}\n\n`+
+          `Time: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n\n`+
+          `💰 Bank Value: ${totalValue.toLocaleString()} gp\n`+
+          `Items Parsed: ${bank.length}\n\n`+
+          bank.slice(0,30).map(it=>`ID ${it.item_id} × ${it.qty} (Value ${(prices[it.item_id]||0).toLocaleString()} ea)`).join("\n");
 
-        // Output
-        const out =
-          `Ticks: ${ticks}\n\n` +
-          `Time: ${t.days}d ${t.hours}h ${t.minutes}m ${t.seconds}s\n\n` +
-          `💰 Bank Value: ${totalValue.toLocaleString()} gp\n` +
-          `Items Parsed: ${bank.length}\n\n` +
-          bank.slice(0, 40).map(it => `Slot ${it.slot}: ID ${it.item_id} × ${it.qty}`).join("\n");
-
-        document.getElementById("out").innerText = out;
+        document.getElementById("out").innerText=out;
       };
       reader.readAsArrayBuffer(file);
     }
   </script>
-
-  <h3>
-    You can access your Lost City save file here: <br>
-    <a href="https://2004.lostcity.rs/account" target="_blank">2004.lostcity.rs/account</a>
-  </h3>
 </body>
 </html>
